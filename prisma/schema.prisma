@@ -1,14 +1,11 @@
-// BloodLink — Prisma schema
-// Designed PostgreSQL-compatible; running on SQLite for the local/dev sandbox.
-// To deploy on Neon PostgreSQL: change the datasource provider to "postgresql"
-// and the connection string to a Neon DATABASE_URL.
+// BloodLink — Prisma schema (Neon PostgreSQL)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

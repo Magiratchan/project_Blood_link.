@@ -168,3 +168,35 @@ Work Log:
 
 Stage Summary:
 - Crash fixed at both the API (missing field) and component (defensive coercion) layers. All badges now null-safe.
+
+---
+Task ID: neon-migration
+Agent: orchestrator
+Task: Switch from SQLite to Neon PostgreSQL, migrate schema, seed, test, and clear errors
+
+Work Log:
+- Switched prisma/schema.prisma datasource provider from "sqlite" to "postgresql"
+- Updated .env with Neon connection string (removed channel_binding=require which Prisma can't parse — sslmode=require is sufficient)
+- Discovered: the shell environment had an inherited DATABASE_URL=file:... (old SQLite) that overrides .env — must `unset DATABASE_URL` or explicitly `export` the Neon URL before running bun run dev
+- Ran `prisma generate` to regenerate the Prisma client for PostgreSQL
+- Ran `prisma db push` to create all 14 tables on Neon
+- First seed attempt timed out (3640 individual INSERTs over remote connection too slow)
+- Optimized seed.ts: replaced individual demandHistory.create loops with createMany batch inserts (500/batch), reduced days from 90 to 60, batched shortagePrediction inserts
+- Second seed completed successfully: 119 users, 115 donors, 2 hospitals, 1 blood bank, 8 inventory items, 2440 demand records, 40 predictions, 4 requests
+- Comprehensive API testing against Neon:
+  - Hospital login: ✅ (ID cmt734meu... — PostgreSQL cuid)
+  - Hospital dashboard: ✅ 4 requests, O- CRITICAL PENDING
+  - Analytics overview: ✅ 115 donors, 86 active, 182 units, 2 hospitals
+  - Donor login: ✅ (ID cmt734nop...)
+  - Blood bank login + dashboard: ✅ 8 inventory items (O- LOW at 6 units for shortage demo), 8 predictions, 2 emergency requests
+  - Admin login + dashboard: ✅ 100 users, 16 pending, 4 requests, 10 audit logs
+  - Donor dashboard: ✅ 3 compatible requests with distances (3.9km)
+  - Compatible donors API: ✅ verificationStatus=VERIFIED present for all donors (VerificationBadge crash fix verified)
+  - Nearby donors API: ✅ Arun Kumar S 1.2km, Deepa Ramesh 2.7km (showcase O- donors)
+- Dev log: 0 errors, 0 warnings — all APIs return 200
+- Updated .env.example to show Neon PostgreSQL as the primary database config
+- Removed channel_binding=require (documented in .env.example as a known Prisma issue)
+
+Stage Summary:
+- BloodLink is now running on Neon PostgreSQL. Schema migrated, data seeded, all 4 role dashboards verified against the remote DB. The VerificationBadge crash (from the previous turn) is confirmed fixed against Neon. Zero errors in the dev log.
+- NOTE: The dev server must be started with `export DATABASE_URL="<neon_url>"` (or `unset DATABASE_URL` to let .env take effect) because the shell has an inherited SQLite DATABASE_URL that overrides .env.

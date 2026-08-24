@@ -281,12 +281,15 @@ export async function seedDatabase() {
     });
   }
 
-  // ---- Demand history (synthetic, ~90 days per region/bloodGroup) ----
-  const days = 90;
+  // ---- Demand history (synthetic, ~60 days per region/bloodGroup) — BATCHED ----
+  const days = 60;
   const now = new Date();
+  const demandRows: Array<{
+    date: Date; region: string; bloodGroup: string;
+    unitsRequested: number; unitsFulfilled: number; emergencyLevel: string; isSynthetic: boolean;
+  }> = [];
   for (const region of REGIONS) {
     for (const bg of BLOOD_GROUPS) {
-      // each series has its own baseline + weekly seasonality + mild trend
       const baseline = randInt(2, 8) + (bg === "O+" || bg === "A+" ? 3 : 0) + (region === "Thanjavur" ? 2 : 0);
       const trendSlope = randFloat(-0.04, 0.08);
       for (let d = days; d >= 0; d--) {
@@ -298,58 +301,47 @@ export async function seedDatabase() {
         const unitsRequested = Math.max(0, Math.round(baseline * weekendBoost * noise * trendFactor));
         const fulfillmentRate = randFloat(0.6, 0.95);
         const unitsFulfilled = Math.round(unitsRequested * fulfillmentRate);
-        const emergencyLevel: Urgency =
+        const emergencyLevel: string =
           unitsRequested >= 12 ? "CRITICAL" :
           unitsRequested >= 8 ? "HIGH" :
           unitsRequested >= 4 ? "MEDIUM" : "NORMAL";
-        await db.demandHistory.create({
-          data: {
-            date,
-            region,
-            bloodGroup: bg,
-            unitsRequested,
-            unitsFulfilled,
-            emergencyLevel,
-            isSynthetic: true,
-          },
-        });
+        demandRows.push({ date, region, bloodGroup: bg, unitsRequested, unitsFulfilled, emergencyLevel, isSynthetic: true });
       }
     }
   }
+  // Batch insert in chunks of 500 for remote-DB performance
+  for (let i = 0; i < demandRows.length; i += 500) {
+    await db.demandHistory.createMany({ data: demandRows.slice(i, i + 500) });
+  }
 
-  // ---- Shortage predictions (computed from demand + inventory) ----
+  // ---- Shortage predictions (computed from demand + inventory) — BATCHED ----
+  // Fetch all demand + inventory once (batch), compute predictions in memory, then bulk-insert.
+  const allDemand = await db.demandHistory.findMany({ orderBy: { date: "asc" } });
+  const allInventory = await db.bloodInventory.findMany();
+  const predictionRows: Array<{
+    region: string; bloodGroup: string; predictedDate: Date; shortageRisk: number;
+    expectedDemand: string; expectedUnits: number; recommendation: string;
+    confidence: number; method: string; isSynthetic: boolean;
+  }> = [];
   for (const region of REGIONS) {
     for (const bg of BLOOD_GROUPS) {
-      const history = await db.demandHistory.findMany({
-        where: { region, bloodGroup: bg },
-        orderBy: { date: "asc" },
-        take: 30,
-      });
-      const inventory = await db.bloodInventory.findMany({
-        where: { region, bloodGroup: bg },
-      });
-      const result = predictShortage(
-        region,
-        bg,
-        history.map((h) => ({ date: h.date, unitsRequested: h.unitsRequested, unitsFulfilled: h.unitsFulfilled })),
-        inventory.map((i) => ({ bloodGroup: i.bloodGroup as BloodGroup, units: i.units, region: i.region }))
-      );
-      await db.shortagePrediction.create({
-        data: {
-          region,
-          bloodGroup: bg,
-          predictedDate: result.predictedDate,
-          shortageRisk: result.shortageRisk,
-          expectedDemand: result.expectedDemand,
-          expectedUnits: result.expectedUnits,
-          recommendation: result.recommendation,
-          confidence: result.confidence,
-          method: result.method,
-          isSynthetic: true,
-        },
+      const history = allDemand
+        .filter((h) => h.region === region && h.bloodGroup === bg)
+        .slice(-30)
+        .map((h) => ({ date: h.date, unitsRequested: h.unitsRequested, unitsFulfilled: h.unitsFulfilled }));
+      const inventory = allInventory
+        .filter((i) => i.region === region && i.bloodGroup === bg)
+        .map((i) => ({ bloodGroup: i.bloodGroup as BloodGroup, units: i.units, region: i.region }));
+      const result = predictShortage(region, bg, history, inventory);
+      predictionRows.push({
+        region, bloodGroup: bg, predictedDate: result.predictedDate,
+        shortageRisk: result.shortageRisk, expectedDemand: result.expectedDemand,
+        expectedUnits: result.expectedUnits, recommendation: result.recommendation,
+        confidence: result.confidence, method: result.method, isSynthetic: true,
       });
     }
   }
+  await db.shortagePrediction.createMany({ data: predictionRows });
 
   // ---- A few emergency blood requests in varied states ----
   const demoHospital = ctx.hospitals[0]; // Thanjavur
