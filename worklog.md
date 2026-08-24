@@ -258,3 +258,24 @@ Stage Summary:
 - Existing donors can edit their profile via the "Edit Profile" button in the header.
 - A "Medical Profile" summary card in the right column displays their details at a glance.
 - All data persists to Neon PostgreSQL. Privacy: coordinates rounded to ~100m, exact street address never required.
+
+---
+Task ID: fix-select-under-map
+Agent: orchestrator
+Task: Fix blood group Select dropdown rendering under the Leaflet map in DonorProfileEditor
+
+Work Log:
+- Root cause: Leaflet assigns high z-index values (400-800) to its internal panes (tile/overlay/marker/popup/control). The shadcn Select dropdown portal uses z-50 (z-index: 50), so Leaflet's panes stacked above the dropdown — the dropdown opened "under" the map.
+- Initial attempt: Added `.leaflet-container { isolation: isolate; }` to globals.css OUTSIDE @layer — Tailwind v4 stripped it during compilation (0 occurrences of "leaflet" in output CSS).
+- Fix: Moved the rule INSIDE `@layer base` in globals.css. Tailwind v4 preserves rules inside @layer blocks.
+- `isolation: isolate` creates a new stacking context on the map container, trapping Leaflet's internal panes (z-index 400-800) inside it. The Select portal content (z-50, rendered at body level) now renders above the map regardless of overlap.
+- Verified with Agent Browser:
+  - Before fix: `getComputedStyle(map).isolation` was "auto"
+  - After fix: `getComputedStyle(map).isolation` is "isolate" ✓
+  - Blood group Select dropdown opens with all 8 options visible (A+, A-, B+, B-, AB+, AB-, O+, O-)
+  - Selected B+ successfully ✓
+  - No errors
+- Lint: 0 errors, 0 warnings
+
+Stage Summary:
+- Blood group Select (and all other Select dropdowns) now render above Leaflet maps. The fix is global (applies to all .leaflet-container elements via globals.css), so it also fixes the same potential issue in the hospital DonorsBrowser map and any other map+dropdown combination.

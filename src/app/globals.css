@@ -119,4 +119,10 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Leaflet stacking-context fix: traps Leaflet's high z-index panes
+     (400-800) inside the map container so they don't render above
+     Radix UI portals (Select/Dialog/Popover dropdowns at z-50). */
+  .leaflet-container {
+    isolation: isolate;
+  }
 }
