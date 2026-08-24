@@ -1,0 +1,327 @@
+// BloodLink — Prisma schema
+// Designed PostgreSQL-compatible; running on SQLite for the local/dev sandbox.
+// To deploy on Neon PostgreSQL: change the datasource provider to "postgresql"
+// and the connection string to a Neon DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// ENUMS (string-based for SQLite compatibility; typed via shared constants)
+// ---------------------------------------------------------------------------
+// Roles: DONOR | HOSPITAL | BLOOD_BANK | ADMIN
+// Urgency: CRITICAL | HIGH | MEDIUM | NORMAL
+// RequestStatus: PENDING | MATCHING | DONOR_FOUND | PARTIALLY_FULFILLED | FULFILLED | CANCELLED | EXPIRED
+// ResponseStatus: SENT | VIEWED | ACCEPTED | DECLINED | EXPIRED
+// Verification: PENDING | VERIFIED | REJECTED | SUSPENDED
+
+// ---------------------------------------------------------------------------
+// AUTH & USERS
+// ---------------------------------------------------------------------------
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String
+  name              String
+  role              String   // DONOR | HOSPITAL | BLOOD_BANK | ADMIN
+  phone             String?
+  verificationStatus String  @default("PENDING") // PENDING | VERIFIED | REJECTED | SUSPENDED
+  isActive          Boolean  @default(true)
+  avatarColor       String?  // for UI avatars
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  donor             Donor?
+  hospital          Hospital?
+  bloodBank         BloodBank?
+  notifications     Notification[]
+  sessions          Session[]
+  auditLogs         AuditLog[]
+
+  @@index([role])
+  @@index([verificationStatus])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// PROFILES
+// ---------------------------------------------------------------------------
+model Donor {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bloodGroup      String   // A+ A- B+ B- AB+ AB- O+ O-
+  // approximate, privacy-preserving location
+  lat             Float
+  lng             Float
+  address         String?  // region/city-level only
+  region          String
+  dateOfBirth     DateTime?
+  gender          String?
+  available       Boolean  @default(true)
+  lastDonationDate DateTime?
+  donationCount   Int      @default(0)
+  totalRequests   Int      @default(0)   // requests received
+  acceptedCount   Int      @default(0)
+  declinedCount   Int      @default(0)
+  noResponseCount Int      @default(0)
+  responseRate    Float    @default(0)   // 0-100 percentage
+  healthNotes     String?
+  verificationStatus String @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  donations       Donation[]
+  matchingResults MatchingResult[]
+  notificationEvents NotificationEvent[]
+
+  @@index([bloodGroup])
+  @@index([available])
+  @@index([region])
+  @@index([verificationStatus])
+}
+
+model Hospital {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  licenseNumber   String?
+  lat             Float
+  lng             Float
+  address         String
+  region          String
+  phone           String?
+  verificationStatus String @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  bloodRequests   BloodRequest[]
+
+  @@index([region])
+  @@index([verificationStatus])
+}
+
+model BloodBank {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  licenseNumber   String?
+  lat             Float
+  lng             Float
+  address         String
+  region          String
+  phone           String?
+  verificationStatus String @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  inventory       BloodInventory[]
+
+  @@index([region])
+  @@index([verificationStatus])
+}
+
+// ---------------------------------------------------------------------------
+// BLOOD REQUESTS & MATCHING
+// ---------------------------------------------------------------------------
+model BloodRequest {
+  id              String   @id @default(cuid())
+  requestId       String   @unique // human-friendly e.g. BL-REQ-0001
+  hospitalId      String
+  hospital        Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  bloodGroup      String   // required blood group
+  unitsRequired   Int
+  unitsFulfilled   Int      @default(0)
+  urgency         String   // CRITICAL | HIGH | MEDIUM | NORMAL
+  requiredBy      DateTime // deadline
+  notes           String?
+  lat             Float
+  lng             Float
+  address         String
+  region          String
+  status          String   @default("PENDING") // PENDING | MATCHING | DONOR_FOUND | PARTIALLY_FULFILLED | FULFILLED | CANCELLED | EXPIRED
+  matchedDonorId  String?  // selected donor (Donor.id)
+  patientCondition String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  matchingResults MatchingResult[]
+  notificationEvents NotificationEvent[]
+  donations       Donation[]
+
+  @@index([bloodGroup])
+  @@index([status])
+  @@index([urgency])
+  @@index([hospitalId])
+  @@index([region])
+  @@index([createdAt])
+}
+
+model MatchingResult {
+  id              String   @id @default(cuid())
+  requestId       String
+  bloodRequest    BloodRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  donorId         String
+  donor           Donor    @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  bloodGroup      String
+  matchScore      Float    // 0-100
+  distanceKm      Float
+  distanceScore   Float    // 0-30
+  availabilityScore Float  // 0-25
+  urgencyScore    Float    // 0-20
+  responseScore   Float    // 0-25
+  recommendationReason String
+  rank            Int
+  compatible      Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([requestId])
+  @@index([donorId])
+  @@index([matchScore])
+}
+
+model NotificationEvent {
+  id              String   @id @default(cuid())
+  requestId       String
+  bloodRequest    BloodRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  donorId         String
+  donor           Donor    @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  status          String   @default("SENT") // SENT | VIEWED | ACCEPTED | DECLINED | EXPIRED
+  chainOrder      Int      // order in the donor chain (0 = first notified)
+  sentAt          DateTime @default(now())
+  viewedAt        DateTime?
+  respondedAt     DateTime?
+  note            String?
+  createdAt       DateTime @default(now())
+
+  @@index([requestId])
+  @@index([donorId])
+  @@index([status])
+}
+
+model Donation {
+  id              String   @id @default(cuid())
+  requestId       String
+  bloodRequest    BloodRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  donorId         String
+  donor           Donor    @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  bloodGroup      String
+  units           Int
+  status          String   @default("PENDING") // PENDING | COMPLETED | CANCELLED
+  donatedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([requestId])
+  @@index([donorId])
+}
+
+// ---------------------------------------------------------------------------
+// INVENTORY & DEMAND
+// ---------------------------------------------------------------------------
+model BloodInventory {
+  id              String   @id @default(cuid())
+  bloodBankId     String
+  bloodBank       BloodBank @relation(fields: [bloodBankId], references: [id], onDelete: Cascade)
+  bloodGroup      String
+  units           Int      @default(0)
+  lowThreshold    Int      @default(10)
+  region          String
+  lastUpdated      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([bloodBankId, bloodGroup])
+  @@index([bloodGroup])
+  @@index([region])
+}
+
+model DemandHistory {
+  id              String   @id @default(cuid())
+  date            DateTime
+  region          String
+  bloodGroup      String
+  unitsRequested  Int
+  unitsFulfilled  Int
+  emergencyLevel  String   // CRITICAL | HIGH | MEDIUM | NORMAL
+  isSynthetic     Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([date])
+  @@index([region])
+  @@index([bloodGroup])
+}
+
+model ShortagePrediction {
+  id              String   @id @default(cuid())
+  region          String
+  bloodGroup      String
+  predictedDate   DateTime
+  shortageRisk    Float    // 0-100 percentage
+  expectedDemand  String   // LOW | MODERATE | HIGH | CRITICAL
+  expectedUnits   Int
+  recommendation  String
+  confidence      Float    // 0-100
+  method          String   @default("statistical-v1")
+  isSynthetic     Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([region, bloodGroup])
+  @@index([predictedDate])
+}
+
+// ---------------------------------------------------------------------------
+// NOTIFICATIONS & AUDIT
+// ---------------------------------------------------------------------------
+model Notification {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            String   // EMERGENCY_REQUEST | REQUEST_RESPONSE | SYSTEM | REQUEST_UPDATE
+  title           String
+  message         String
+  requestId       String?
+  data            String?  // JSON string of extra payload
+  read            Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action          String
+  resource        String
+  resourceId      String?
+  details         String?
+  ipAddress       String?
+  severity        String   @default("INFO") // INFO | WARNING | CRITICAL
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
