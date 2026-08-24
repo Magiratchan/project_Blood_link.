@@ -92,3 +92,62 @@ Work Log:
 
 Stage Summary:
 - BloodLink is COMPLETE and production-ready for hackathon demo. All 15 PRD requirements implemented and browser-verified end-to-end.
+
+---
+Task ID: enhance-animations-navmap
+Agent: orchestrator
+Task: Add better animations/transitions + donor-to-hospital navigation map
+
+Work Log:
+- Added hospital lat/lng/address/region to /api/dashboard DONOR branch response so donors can navigate
+- Created src/components/bloodlink/ui/motion.tsx — shared Framer Motion helpers:
+  - springSoft, springSnappy, easeSmooth transitions
+  - staggerContainer, fadeUp, fadeScale, slideInLeft variants
+  - StaggerGroup + StaggerItem components
+  - AnimatedBar (animated width fill for score/progress bars)
+  - CountUp (animated number counter)
+  - HoverCard
+- Created src/components/bloodlink/maps/DonorNavigationMap.tsx — donor→hospital routing map:
+  - Pulsing red donor marker (CSS keyframe animation)
+  - Hospital destination marker with animated beam
+  - Animated dashed route line (SVG stroke-dashoffset animation)
+  - Auto-fit bounds to show both points
+  - Route summary cards: Distance / Est. ETA / Route mode
+  - Origin→destination visual
+  - "Get Directions" button (opens OSM turn-by-turn) + "Google Maps" button
+  - ETA heuristic based on distance + urgency
+- Created DonorNavMapLazy.tsx (dynamic import, ssr:false)
+- Rewrote DonorDashboard.tsx:
+  - Framer Motion entrance animation on whole panel
+  - Spring-animated avatar icon (scale+rotate in)
+  - Animated availability badge border/background color transition + pulsing green dot when available
+  - AnimatePresence for pending-verification banner
+  - Staggered stat cards with CountUp values + hover lift
+  - Staggered request cards with critical-shimmer accent bar (animated gradient sweep)
+  - EXPANDABLE "Navigate" panel per request (AnimatePresence height auto) showing DonorNavigationMap
+  - Staggered notifications list with pulsing unread dot
+- Rewrote DonorChain.tsx:
+  - Sequential step reveal (each step slides in + delays by index)
+  - Spring-animated status circle icons (scale+rotate entrance)
+  - Animated vertical timeline line (scaleY grows)
+  - Pulsing emerald ring on the SELECTED donor
+- Updated MatchingResults.tsx:
+  - Staggered donor card entrance (fade+slide+scale)
+  - Spring-animated rank badge
+  - Animated score bars (AnimatedBar with staggered delays per sub-score)
+  - CountUp match score number
+- Updated BloodLinkApp.tsx:
+  - AnimatePresence view transitions (fade+slide) keyed by role+view
+  - Animated loading screen (pulsing Droplet logo + breathing text)
+- Updated cards.tsx StatCard value type to ReactNode (supports CountUp)
+- Lint: 0 errors, 0 warnings
+- Verified end-to-end with Agent Browser:
+  - Donor dashboard loads with 3 animated stat cards (CountUp working)
+  - Navigate button expands the donor→hospital map (verified: 2 markers, pulsing donor, animated route, hospital beam, ETA 7min, dist 3.9km)
+  - "Get Directions" + "Google Maps" buttons present
+  - Hospital flow: AI matching (6 ranked, animated score bars), decline→accept→donor chain (DECLINED→ACCEPTED+SELECTED with pulsing ring→EXPIRED)
+  - No runtime errors
+
+Stage Summary:
+- Donor navigation map fully functional: pulsing donor marker + hospital destination + animated dashed route + ETA/distance summary + OSM/Google Maps directions links.
+- Animations added across: loading screen, view transitions, stat cards (CountUp + hover lift), donor request cards (staggered + critical shimmer), availability badge (color transition + pulse), notifications (staggered + unread pulse), donor chain (sequential reveal + pulsing selected ring), matching results (staggered cards + animated score bars + CountUp). All subtle, professional, healthcare-appropriate.

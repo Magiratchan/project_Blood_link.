@@ -42,6 +42,11 @@ export async function GET(req: NextRequest) {
         hospitalName: r.hospital.name,
         distanceKm: haversineKm(donor.lat, donor.lng, r.lat, r.lng),
         createdAt: r.createdAt,
+        // Hospital location so donors can navigate to it
+        lat: r.lat,
+        lng: r.lng,
+        address: r.address,
+        region: r.region,
       }));
 
     const notifications = await db.notification.findMany({

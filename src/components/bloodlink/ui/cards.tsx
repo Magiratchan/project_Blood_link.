@@ -13,7 +13,7 @@ export function StatCard({
   className,
 }: {
   label: string;
-  value: string | number;
+  value: React.ReactNode;
   sublabel?: string;
   icon?: LucideIcon;
   accent?: "default" | "red" | "emerald" | "amber" | "violet" | "teal";

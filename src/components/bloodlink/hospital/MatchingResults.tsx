@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { BloodGroupBadge, VerificationBadge } from "@/components/bloodlink/ui/badges";
 import { formatDistance, scoreColor } from "@/components/bloodlink/ui/format";
 import { MedicalDisclaimer } from "@/components/bloodlink/ui/disclaimer";
+import { AnimatedBar, CountUp, springSoft } from "@/components/bloodlink/ui/motion";
 import { apiCall } from "@/lib/api/hooks";
 import { toast } from "sonner";
 import type { MatchingResultItem } from "@/lib/client-types";
@@ -70,18 +71,29 @@ export function MatchingResults({
         const isOpen = expanded === r.donor.id;
         const isTop = idx === 0;
         return (
-          <Card key={r.id} className={cn("overflow-hidden transition", isTop && "ring-2 ring-emerald-300")}>
+          <motion.div
+            key={r.id}
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: idx * 0.08 }}
+          >
+          <Card className={cn("overflow-hidden transition", isTop && "ring-2 ring-emerald-300")}>
             <Collapsible open={isOpen} onOpenChange={() => setExpanded(isOpen ? null : r.donor.id)}>
               <div className="p-3.5 sm:p-4">
                 <div className="flex items-center gap-3">
                   {/* Rank + score */}
                   <div className="flex flex-col items-center">
-                    <div className={cn(
-                      "flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold",
-                      isTop ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-600"
-                    )}>
+                    <motion.div
+                      className={cn(
+                        "flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold",
+                        isTop ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-600"
+                      )}
+                      initial={{ scale: 0, rotate: -30 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 16, delay: 0.1 + idx * 0.08 }}
+                    >
                       {r.rank}
-                    </div>
+                    </motion.div>
                   </div>
                   {/* Donor info */}
                   <div className="min-w-0 flex-1">
@@ -100,14 +112,16 @@ export function MatchingResults({
                   </div>
                   {/* Match score */}
                   <div className="flex flex-col items-end">
-                    <p className={cn("text-2xl font-bold tabular-nums", scoreColor(r.matchScore))}>{Math.round(r.matchScore)}<span className="text-sm">%</span></p>
+                    <p className={cn("text-2xl font-bold tabular-nums", scoreColor(r.matchScore))}>
+                      <CountUp value={Math.round(r.matchScore)} suffix="%" duration={1.2} />
+                    </p>
                     <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">match score</p>
                   </div>
                 </div>
 
                 {/* Score bar */}
                 <div className="mt-3">
-                  <Progress value={r.matchScore} className="h-1.5" />
+                  <AnimatedBar value={r.matchScore} className="h-1.5" barClassName={cn("h-full rounded-full", isTop ? "bg-emerald-500" : "bg-violet-500")} delay={0.2 + idx * 0.08} />
                 </div>
 
                 {/* Score breakdown mini-bars */}
@@ -117,15 +131,20 @@ export function MatchingResults({
                     { label: "Avail.", val: r.availabilityScore, max: 25, color: "bg-orange-400" },
                     { label: "Urgency", val: r.urgencyScore, max: 20, color: "bg-amber-400" },
                     { label: "Response", val: r.responseScore, max: 25, color: "bg-emerald-400" },
-                  ].map((s) => (
+                  ].map((s, si) => (
                     <div key={s.label}>
                       <div className="flex items-center justify-between text-[10px] text-slate-500">
                         <span>{s.label}</span>
                         <span className="tabular-nums">{Math.round(s.val)}/{s.max}</span>
                       </div>
-                      <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-slate-100">
-                        <div className={cn("h-full rounded-full", s.color)} style={{ width: `${(s.val / s.max) * 100}%` }} />
-                      </div>
+                      <AnimatedBar
+                        value={s.val}
+                        max={s.max}
+                        className="mt-0.5 h-1"
+                        barClassName={cn("h-full rounded-full", s.color)}
+                        duration={0.7}
+                        delay={0.3 + idx * 0.08 + si * 0.05}
+                      />
                     </div>
                   ))}
                 </div>
@@ -169,6 +188,7 @@ export function MatchingResults({
               </div>
             </Collapsible>
           </Card>
+          </motion.div>
         );
       })}
 

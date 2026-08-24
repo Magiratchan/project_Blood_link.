@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useApp, defaultViewForRole } from "@/stores/app-store";
 import { Landing } from "@/components/bloodlink/Landing";
 import { AuthModal } from "@/components/bloodlink/AuthModal";
@@ -14,7 +15,7 @@ import { PredictionsPanel } from "@/components/bloodlink/analytics/PredictionsPa
 import { NotificationsPanel } from "@/components/bloodlink/NotificationsPanel";
 import { DonorsBrowser } from "@/components/bloodlink/hospital/DonorsBrowser";
 import { MedicalDisclaimer } from "@/components/bloodlink/ui/disclaimer";
-import { Loader2 } from "lucide-react";
+import { Droplet } from "lucide-react";
 
 export function BloodLinkApp() {
   const { user, loading, view, setUser, setLoading, setView } = useApp();
@@ -42,12 +43,27 @@ export function BloodLinkApp() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-600 text-white shadow-lg">
-            <Loader2 className="h-6 w-6 animate-spin" />
-          </div>
-          <p className="text-sm font-medium text-slate-500">Loading BloodLink…</p>
-        </div>
+        <motion.div
+          className="flex flex-col items-center gap-3"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 24 }}
+        >
+          <motion.div
+            className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-600 text-white shadow-lg"
+            animate={{ scale: [1, 1.08, 1] }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <Droplet className="h-6 w-6" />
+          </motion.div>
+          <motion.p
+            className="text-sm font-medium text-slate-500"
+            animate={{ opacity: [0.4, 1, 0.4] }}
+            transition={{ duration: 1.6, repeat: Infinity }}
+          >
+            Loading BloodLink…
+          </motion.p>
+        </motion.div>
       </div>
     );
   }
@@ -64,7 +80,17 @@ export function BloodLinkApp() {
   return (
     <>
       <DashboardShell>
-        {renderView(view, user.role)}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${user.role}-${view}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {renderView(view, user.role)}
+          </motion.div>
+        </AnimatePresence>
       </DashboardShell>
       <AuthModal />
     </>
