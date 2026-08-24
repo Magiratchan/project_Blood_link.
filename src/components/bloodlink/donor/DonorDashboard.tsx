@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   Droplet, TrendingUp, HeartHandshake, BellRing, AlertTriangle,
   Clock, MapPin, Check, X, History, Inbox, ShieldCheck, Navigation, ChevronDown,
+  Pencil, UserCircle, Heart,
 } from "lucide-react";
 import { useApp } from "@/stores/app-store";
 import { useApi, apiCall } from "@/lib/api/hooks";
@@ -27,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
 import DonorNavMapLazy from "./DonorNavMapLazy";
+import { DonorProfileEditor, type DonorProfileData } from "./DonorProfileEditor";
 import { cn } from "@/lib/utils";
 
 interface DonorRequestItem {
@@ -60,6 +62,10 @@ interface DonorProfile {
   verificationStatus: string;
   lat: number;
   lng: number;
+  address?: string | null;
+  dateOfBirth?: string | Date | null;
+  gender?: string | null;
+  healthNotes?: string | null;
 }
 
 interface DonationItem {
@@ -82,7 +88,8 @@ interface ResponseHistoryItem {
 
 interface DonorDashboardData {
   role: "DONOR";
-  donor: DonorProfile;
+  profileComplete?: boolean;
+  donor: DonorProfile | null;
   requests: DonorRequestItem[];
   notifications: NotificationItem[];
   donations: DonationItem[];
@@ -97,9 +104,11 @@ export function DonorDashboard() {
   const [togglingAvail, setTogglingAvail] = useState(false);
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
 
   if (!user) return null;
   const firstName = user.name.split(" ")[0];
+  const profileComplete = data?.profileComplete ?? false;
   const donor: DonorProfile | undefined = data?.donor ?? (user.donor
     ? {
         id: user.donor.id,
@@ -157,6 +166,67 @@ export function DonorDashboard() {
     }
   }
 
+  // ---- Profile setup / edit handler ----
+  async function onProfileSaved(_donor: DonorProfileData) {
+    setEditingProfile(false);
+    await refreshUser();
+    await refetch();
+  }
+
+  // ---- Profile not complete → show setup form ----
+  if (!loading && !profileComplete && !editingProfile) {
+    return (
+      <motion.div
+        className="space-y-5"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <DonorProfileEditor
+          isSetup
+          userName={user.name}
+          userEmail={user.email}
+          userPhone={user.phone}
+          onSaved={onProfileSaved}
+        />
+      </motion.div>
+    );
+  }
+
+  // ---- Edit profile mode ----
+  if (editingProfile) {
+    return (
+      <motion.div
+        className="space-y-5"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <DonorProfileEditor
+          initial={donor ? {
+            id: donor.id,
+            bloodGroup: donor.bloodGroup,
+            available: donor.available,
+            region: donor.region,
+            lat: donor.lat,
+            lng: donor.lng,
+            address: donor.address,
+            dateOfBirth: donor.dateOfBirth,
+            gender: donor.gender,
+            healthNotes: donor.healthNotes,
+            lastDonationDate: donor.lastDonationDate,
+            verificationStatus: donor.verificationStatus,
+          } : null}
+          userName={user.name}
+          userEmail={user.email}
+          userPhone={user.phone}
+          onSaved={onProfileSaved}
+          onCancel={() => setEditingProfile(false)}
+        />
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       className="space-y-5"
@@ -186,34 +256,44 @@ export function DonorDashboard() {
             </div>
           </div>
 
-          <motion.div
-            className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5"
-            animate={{
-              borderColor: donor?.available ? "rgb(16 185 129 / 0.4)" : "rgb(226 232 240)",
-              backgroundColor: donor?.available ? "rgb(236 253 245)" : "rgb(248 250 252)",
-            }}
-            transition={springSoft}
-          >
-            <div>
-              <p className="flex items-center gap-1.5 text-sm font-medium text-slate-900">
-                {donor?.available && (
-                  <motion.span
-                    className="h-2 w-2 rounded-full bg-emerald-500"
-                    animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
-                    transition={{ duration: 1.8, repeat: Infinity }}
-                  />
-                )}
-                {donor?.available ? "Available" : "Unavailable"}
-              </p>
-              <p className="text-[11px] text-slate-500">Toggle donation availability</p>
-            </div>
-            <Switch
-              checked={!!donor?.available}
-              onCheckedChange={toggleAvailability}
-              disabled={togglingAvail || !isVerified}
-              aria-label="Toggle availability"
-            />
-          </motion.div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditingProfile(true)}
+              className="border-slate-300"
+            >
+              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit Profile
+            </Button>
+            <motion.div
+              className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5"
+              animate={{
+                borderColor: donor?.available ? "rgb(16 185 129 / 0.4)" : "rgb(226 232 240)",
+                backgroundColor: donor?.available ? "rgb(236 253 245)" : "rgb(248 250 252)",
+              }}
+              transition={springSoft}
+            >
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-medium text-slate-900">
+                  {donor?.available && (
+                    <motion.span
+                      className="h-2 w-2 rounded-full bg-emerald-500"
+                      animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
+                      transition={{ duration: 1.8, repeat: Infinity }}
+                    />
+                  )}
+                  {donor?.available ? "Available" : "Unavailable"}
+                </p>
+                <p className="text-[11px] text-slate-500">Toggle donation availability</p>
+              </div>
+              <Switch
+                checked={!!donor?.available}
+                onCheckedChange={toggleAvailability}
+                disabled={togglingAvail || !isVerified}
+                aria-label="Toggle availability"
+              />
+            </motion.div>
+          </div>
         </CardContent>
       </Card>
 
@@ -437,6 +517,61 @@ export function DonorDashboard() {
 
         {/* Right column: notifications + history */}
         <div className="space-y-5">
+          {/* Medical profile summary */}
+          {donor && (
+            <SectionCard
+              title="Medical Profile"
+              description="Your donor details"
+              action={
+                <Button variant="ghost" size="sm" onClick={() => setEditingProfile(true)} className="h-7 px-2 text-xs">
+                  <Pencil className="mr-1 h-3 w-3" /> Edit
+                </Button>
+              }
+            >
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <BloodGroupBadge group={donor.bloodGroup} />
+                  <span className="text-xs text-slate-500">{donor.region}</span>
+                  {donor.verificationStatus === "VERIFIED" && (
+                    <span className="ml-auto inline-flex items-center gap-0.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                      <ShieldCheck className="h-2.5 w-2.5" /> Verified
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400">Date of birth</p>
+                    <p className="mt-0.5 font-medium text-slate-700">
+                      {donor.dateOfBirth ? new Date(donor.dateOfBirth).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400">Gender</p>
+                    <p className="mt-0.5 font-medium capitalize text-slate-700">{donor.gender ?? "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400">Last donation</p>
+                    <p className="mt-0.5 font-medium text-slate-700">
+                      {donor.lastDonationDate ? new Date(donor.lastDonationDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "Never"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400">Donations</p>
+                    <p className="mt-0.5 font-medium text-slate-700">{donor.donationCount}</p>
+                  </div>
+                </div>
+                {donor.healthNotes && (
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                    <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                      <Heart className="h-3 w-3" /> Health notes
+                    </p>
+                    <p className="mt-1 line-clamp-3 text-xs text-slate-600">{donor.healthNotes}</p>
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          )}
+
           <SectionCard title="Notifications" description="Recent alerts">
             {!data || data.notifications.length === 0 ? (
               <EmptyState title="No notifications" icon={Inbox} className="py-6" />

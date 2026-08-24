@@ -200,3 +200,61 @@ Work Log:
 Stage Summary:
 - BloodLink is now running on Neon PostgreSQL. Schema migrated, data seeded, all 4 role dashboards verified against the remote DB. The VerificationBadge crash (from the previous turn) is confirmed fixed against Neon. Zero errors in the dev log.
 - NOTE: The dev server must be started with `export DATABASE_URL="<neon_url>"` (or `unset DATABASE_URL` to let .env take effect) because the shell has an inherited SQLite DATABASE_URL that overrides .env.
+
+---
+Task ID: donor-profile-editor
+Agent: orchestrator
+Task: Add editable donor profile for blood group and medical details when registering as donor
+
+Work Log:
+- Discovered: registration created a User but NO Donor record, so new donors had no blood group/location/medical details
+- Created POST /api/donors/profile endpoint (upsert by userId):
+  - Validates bloodGroup (required, one of 8 groups)
+  - Validates lat/lng (required — location)
+  - Validates region (required, one of 5 regions)
+  - Optional: dateOfBirth, gender, healthNotes, lastDonationDate, available, address
+  - Rounds coordinates to ~100m for privacy
+  - Creates new Donor record OR updates existing one
+  - New self-registered donors start as VERIFIED (demo-friendly)
+- Updated GET /api/dashboard DONOR branch:
+  - Returns { profileComplete: false, donor: null, ... } instead of 404 when no Donor record exists
+  - Returns { profileComplete: true, donor: { ...full profile including address, dateOfBirth, gender, healthNotes } } when profile exists
+- Created src/components/bloodlink/maps/LocationPicker.tsx:
+  - Click-to-set location Leaflet map
+  - Pulsing red marker (CSS keyframe animation)
+  - Draggable marker for fine-tuning
+  - Region-aware centering (defaults to region center if no marker yet)
+  - Privacy note shown to user
+- Created DonorProfileEditor.tsx component:
+  - Read-only account info (name, phone from registration)
+  - Blood group selector (required)
+  - Region selector (required)
+  - Location picker map (required)
+  - Address (optional, city/area level only)
+  - Date of birth (date picker)
+  - Gender (select: male/female/other)
+  - Last donation date (date picker, for 56-day deferral check)
+  - Medical details & health notes (textarea — conditions, medications, allergies)
+  - Availability toggle
+  - Medical disclaimer
+  - Two modes: isSetup (first-time completion, prominent card) and edit (for existing donors)
+- Updated DonorDashboard.tsx:
+  - Shows DonorProfileEditor as a full setup card when profileComplete === false
+  - "Edit Profile" button in the header (next to availability toggle)
+  - Edit mode shows the editor pre-filled with existing donor data
+  - New "Medical Profile" summary card in the right column showing blood group, DOB, gender, last donation, donation count, health notes (with Edit button)
+  - onSaved handler refreshes user + dashboard after save
+- Lint: 0 errors, 0 warnings
+- Verified end-to-end with Agent Browser + curl against Neon:
+  - POST /api/donors/profile creates profile → 200 (donor ID cmt79tckv..., bloodGroup B+, gender male, DOB, healthNotes all persisted)
+  - Dashboard returns profileComplete: true after profile creation
+  - Demo donor login → Edit Profile button visible → editor opens with pre-filled data + Leaflet location picker
+  - Medical Profile summary card shows DOB, gender, last donation, donations count
+  - Save returns to dashboard successfully
+  - No runtime errors
+
+Stage Summary:
+- Donors who register now see a "Complete your donor profile" setup form (blood group, location via map, DOB, gender, health/medical notes, last donation date, availability).
+- Existing donors can edit their profile via the "Edit Profile" button in the header.
+- A "Medical Profile" summary card in the right column displays their details at a glance.
+- All data persists to Neon PostgreSQL. Privacy: coordinates rounded to ~100m, exact street address never required.

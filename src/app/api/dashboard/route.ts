@@ -14,7 +14,20 @@ export async function GET(req: NextRequest) {
   const donor = user.role === "DONOR" ? await db.donor.findUnique({ where: { userId: user.id } }) : null;
 
   if (user.role === "DONOR") {
-    if (!donor) return Response.json({ error: "Donor profile not found." }, { status: 404 });
+    // If the donor has not yet completed their profile, return a setup flag
+    // instead of a 404 so the UI can show the profile editor.
+    if (!donor) {
+      return Response.json({
+        role: "DONOR",
+        profileComplete: false,
+        user: { id: user.id, name: user.name, email: user.email },
+        donor: null,
+        requests: [],
+        notifications: [],
+        donations: [],
+        responseHistory: [],
+      });
+    }
 
     // Active emergency requests in the donor's region, compatible with their blood group
     const activeRequests = await db.bloodRequest.findMany({
@@ -72,6 +85,7 @@ export async function GET(req: NextRequest) {
 
     return Response.json({
       role: "DONOR",
+      profileComplete: true,
       donor: {
         id: donor.id,
         bloodGroup: donor.bloodGroup,
@@ -86,6 +100,10 @@ export async function GET(req: NextRequest) {
         verificationStatus: donor.verificationStatus,
         lat: donor.lat,
         lng: donor.lng,
+        address: donor.address,
+        dateOfBirth: donor.dateOfBirth,
+        gender: donor.gender,
+        healthNotes: donor.healthNotes,
       },
       requests: requestsForDonor,
       notifications,
