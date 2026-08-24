@@ -151,3 +151,20 @@ Work Log:
 Stage Summary:
 - Donor navigation map fully functional: pulsing donor marker + hospital destination + animated dashed route + ETA/distance summary + OSM/Google Maps directions links.
 - Animations added across: loading screen, view transitions, stat cards (CountUp + hover lift), donor request cards (staggered + critical shimmer), availability badge (color transition + pulse), notifications (staggered + unread pulse), donor chain (sequential reveal + pulsing selected ring), matching results (staggered cards + animated score bars + CountUp). All subtle, professional, healthcare-appropriate.
+
+---
+Task ID: fix-verification-badge-crash
+Agent: orchestrator
+Task: Fix "Cannot read properties of undefined (reading 'toLowerCase')" in VerificationBadge
+
+Work Log:
+- Root cause: /api/donors/compatible response was missing `verificationStatus` field (it filtered by it but didn't include it in the output). When the DonorsBrowser "Compatible only" toggle called that endpoint, VerificationBadge received undefined → crash.
+- Fix 1 (root cause): Added `verificationStatus: d.verificationStatus` to /api/donors/compatible response mapping.
+- Fix 2 (defensive): Made ALL badge components in src/components/bloodlink/ui/badges.tsx defensive against undefined/null props:
+  - Added a `safe(v, fallback)` coercion helper
+  - UrgencyBadge, StatusBadge, BloodGroupBadge, ResponseBadge, VerificationBadge, RoleBadge now all accept `string | null | undefined` and fall back gracefully instead of crashing.
+- Lint: 0 errors, 0 warnings
+- Verified with Agent Browser: Login as hospital → Find Donors → select O- → toggle "Compatible only" → 12 compatible donors render with "Verified" badges, 0 console errors.
+
+Stage Summary:
+- Crash fixed at both the API (missing field) and component (defensive coercion) layers. All badges now null-safe.

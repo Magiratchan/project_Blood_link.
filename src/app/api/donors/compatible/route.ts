@@ -52,6 +52,7 @@ export async function GET(req: NextRequest) {
       available: d.available,
       donationCount: d.donationCount,
       responseRate: d.responseRate,
+      verificationStatus: d.verificationStatus,
       lastDonationDate: d.lastDonationDate,
       distanceKm: hasLocation ? haversineKm(lat, lng, d.lat, d.lng) : null,
     }))
