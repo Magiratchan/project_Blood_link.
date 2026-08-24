@@ -279,3 +279,62 @@ Work Log:
 
 Stage Summary:
 - Blood group Select (and all other Select dropdowns) now render above Leaflet maps. The fix is global (applies to all .leaflet-container elements via globals.css), so it also fixes the same potential issue in the hospital DonorsBrowser map and any other map+dropdown combination.
+
+---
+Task ID: debug-auth-production
+Agent: orchestrator
+Task: Debug authentication system for production deployment
+
+Work Log:
+- Audited entire auth system:
+  - /api/auth/register: validates email/password/name/role, hashes password with bcrypt (10 rounds), creates User, creates Session, sets httpOnly cookie. ✅ working
+  - /api/auth/login: verifies password with bcrypt.compare, creates session, sets cookie. ✅ working
+  - /api/auth/me: reads session cookie, queries Session+User, checks expiry + isActive. ✅ working
+  - /api/auth/logout: destroys session + clears cookie. ✅ working
+  - Session: 7-day TTL, httpOnly, secure in production, sameSite:lax. ✅ correct
+  - Password hashing: bcrypt $2b$10$ (60 chars), verify returns true. ✅ verified in DB
+  - Role-based auth: requireRole helper, dashboard role checks. ✅ working
+- Verified via curl (all 10 tests pass):
+  - Register DONOR/HOSPITAL/BLOOD_BANK → 200 ✓
+  - Register ADMIN → 400 (correct, admins can't self-register) ✓
+  - Login all roles → 200 + session ✓
+  - Wrong password → 401 ✓
+  - Duplicate email → 409 ✓
+  - Short password → 400 ✓
+  - Unauthenticated dashboard → 401 ✓
+  - DONOR accessing admin endpoint → 403 ✓
+
+BUG FOUND + FIXED:
+- Bug: /api/dashboard returned HTTP 404 ("Hospital/Blood Bank profile not found") for newly-registered hospital/blood-bank accounts (they have a User but no Hospital/BloodBank profile yet). The frontend's useApi hook treated 404 as an error and showed nothing — so after registration, the dashboard appeared blank/broken.
+- Fix: Updated /api/dashboard to return { profileComplete: false, hospital: null, requests: [] } (HTTP 200) for hospital/blood-bank accounts with no profile yet, instead of 404. Mirrors the donor branch pattern.
+- Fix: Added "Verification in progress" guard UI in HospitalDashboard and BloodBankDashboard for when hospital/bloodBank is null — shows a friendly amber card explaining the account is pending admin verification, instead of crashing on null access.
+- Created POST /api/hospitals/profile and POST /api/blood-banks/profile endpoints (upsert) so registered hospital/blood-bank accounts can complete their facility details (name, location, region, license).
+
+Production build:
+- Ran `bun run build` (next build with output:standalone) → ✓ Compiled successfully in 15s, all 28 routes generated
+- Tested production server (bun .next/standalone/server.js):
+  - Register DONOR → 200 (user created in Neon) ✓
+  - Login → 200 + session ✓
+  - /api/auth/me → returns user ✓
+  - Dashboard → role: DONOR, profileComplete: false (no crash!) ✓
+  - All demo accounts login ✓
+  - Zero errors in server.log ✓
+
+Full E2E flow verified (dev mode, all 9 steps pass):
+1. Register donor → user created (ID cmt7dpssk...) ✓
+2. Login → session cookie set ✓
+3. /api/auth/me → returns user, isActive: true ✓
+4. Dashboard → profileComplete: false (no crash) ✓
+5. Complete donor profile (POST /api/donors/profile) → donor record created ✓
+6. Dashboard → profileComplete: true, donor bloodGroup: O- ✓
+7. All 4 demo accounts login correctly (DONOR/HOSPITAL/BLOOD_BANK/ADMIN) ✓
+8. Error cases: wrong password (401), duplicate email (409), invalid role (400) ✓
+9. No actual errors in dev.log ✓
+
+- Lint: 0 errors, 0 warnings
+- Cleaned up 13 test accounts from Neon DB
+
+Stage Summary:
+- Auth system fully working in both dev and production modes.
+- Root cause of "registration/login not working after deployment" was the dashboard API returning 404 for newly-registered hospital/blood-bank accounts (no profile yet), causing the frontend to show a blank dashboard. Fixed by returning profileComplete:false + null profile, and adding "Verification in progress" UI guards.
+- Production build succeeds. Production server tested with register + login + session + dashboard — all working against Neon PostgreSQL.

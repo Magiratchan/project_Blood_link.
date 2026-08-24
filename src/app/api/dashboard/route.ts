@@ -114,7 +114,18 @@ export async function GET(req: NextRequest) {
 
   if (user.role === "HOSPITAL") {
     const hospital = await db.hospital.findUnique({ where: { userId: user.id } });
-    if (!hospital) return Response.json({ error: "Hospital profile not found." }, { status: 404 });
+    if (!hospital) {
+      // Newly registered hospital with no profile yet — return a pending state
+      // so the frontend can show a "verification in progress" message instead
+      // of a hard error.
+      return Response.json({
+        role: "HOSPITAL",
+        profileComplete: false,
+        user: { id: user.id, name: user.name, email: user.email },
+        hospital: null,
+        requests: [],
+      });
+    }
 
     const requests = await db.bloodRequest.findMany({
       where: { hospitalId: hospital.id },
@@ -128,6 +139,7 @@ export async function GET(req: NextRequest) {
 
     return Response.json({
       role: "HOSPITAL",
+      profileComplete: true,
       hospital: {
         id: hospital.id,
         name: hospital.name,
@@ -143,7 +155,19 @@ export async function GET(req: NextRequest) {
 
   if (user.role === "BLOOD_BANK") {
     const bloodBank = await db.bloodBank.findUnique({ where: { userId: user.id } });
-    if (!bloodBank) return Response.json({ error: "Blood bank profile not found." }, { status: 404 });
+    if (!bloodBank) {
+      // Newly registered blood bank with no profile yet
+      return Response.json({
+        role: "BLOOD_BANK",
+        profileComplete: false,
+        user: { id: user.id, name: user.name, email: user.email },
+        bloodBank: null,
+        inventory: [],
+        regionalInventory: [],
+        predictions: [],
+        emergencyRequests: [],
+      });
+    }
 
     const inventory = await db.bloodInventory.findMany({ where: { bloodBankId: bloodBank.id }, orderBy: { bloodGroup: "asc" } });
     const allInventory = await db.bloodInventory.findMany({ where: { region: bloodBank.region }, orderBy: { bloodGroup: "asc" } });

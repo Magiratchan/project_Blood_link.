@@ -146,6 +146,29 @@ export function BloodBankDashboard() {
     }
   }
 
+  // Newly registered blood bank with no verified profile yet
+  if (!bank) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Blood Bank Dashboard</h1>
+          <p className="mt-0.5 text-sm text-slate-500">{user?.name}</p>
+        </div>
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-6 py-12 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100">
+            <Boxes className="h-7 w-7 text-amber-600" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-amber-900">Verification in progress</p>
+            <p className="mt-1 max-w-md text-sm text-amber-700">
+              Your blood bank account is registered. A BloodLink admin must verify your facility before you can manage inventory. Demo accounts are already verified — log out and try a demo account to explore the full dashboard.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}

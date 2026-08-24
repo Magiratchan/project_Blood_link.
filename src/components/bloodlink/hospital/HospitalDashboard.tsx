@@ -68,6 +68,29 @@ export function HospitalDashboard() {
     );
   }
 
+  // Newly registered hospital with no verified profile yet
+  if (!data.hospital) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Hospital Dashboard</h1>
+          <p className="mt-0.5 text-sm text-slate-500">{user.name}</p>
+        </div>
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-6 py-12 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100">
+            <Building2 className="h-7 w-7 text-amber-600" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-amber-900">Verification in progress</p>
+            <p className="mt-1 max-w-md text-sm text-amber-700">
+              Your hospital account is registered. A BloodLink admin must verify your facility before you can create emergency blood requests. Demo accounts are already verified — log out and try a demo account to explore the full dashboard.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const hospital = data.hospital;
   const requests = data.requests;
   const activeRequests = requests.filter((r) => ["PENDING", "MATCHING", "DONOR_FOUND", "PARTIALLY_FULFILLED"].includes(r.status));
